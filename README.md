@@ -75,6 +75,8 @@ for (struct addrinfo *p = result; p != NULL; p = p->ai_next) {
 ```
 
 ## 컴파일 및 실행 방법
+
+- o 옵션을 활용하여 실행파일의 이름을 지정
 ```bash
 gcc -o http_client http_raw_client.c
 ./http_client

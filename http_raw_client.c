@@ -5,14 +5,16 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 
 #define PORT "80"  // 문자열로 변경
-#define HOST "example.com"
-#define REQUEST "GET / HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\n\r\n"
+// 테스트용 공개 API 
+#define HOST "httpbin.org"
+#define REQUEST "GET /get HTTP/1.1\r\nHost: httpbin.org\r\n\r\n"
 
 int main() {
     struct addrinfo hints, *res, *p;
-    int sockfd;
+    int sockfd, optval;
     char buffer[4096];
 
     // 1. 도메인 → IP 주소 변환 (현대적 방식)
@@ -31,6 +33,18 @@ int main() {
         sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
         if (sockfd == -1) continue;
 
+        // 2.1. 타임아웃 설정 (5초)
+        struct timeval tv;
+        tv.tv_sec = 5;
+        tv.tv_usec = 0;
+        if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0 ||
+            setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0) {
+            perror("setsockopt 실패");
+            close(sockfd);
+            freeaddrinfo(res);
+            return 1;
+        }
+
         if (connect(sockfd, p->ai_addr, p->ai_addrlen) == 0) {
             break;  // 연결 성공
         }
@@ -44,8 +58,32 @@ int main() {
         return 1;
     }
 
-    // 3. HTTP 요청 전송 및 응답 수신
-    // ... 기존 코드 유지 ...
+// 3. HTTP 요청 전송 및 응답 수신
+int bytes_sent = send(sockfd, REQUEST, strlen(REQUEST), 0);
+if (bytes_sent < 0) {
+    perror("send 실패");
+    close(sockfd);
+    freeaddrinfo(res);
+    return 1;
+}
+
+// 버퍼 초기화
+int total_received = 0;
+
+// 응답 수신 루프
+while (1) {
+    int bytes_received = recv(sockfd, buffer + total_received, 
+                            sizeof(buffer) - total_received - 1, 0);
+    if (bytes_received <= 0) break;
+    total_received += bytes_received;
+    if (total_received >= sizeof(buffer) - 1) break;
+}
+
+// 응답 출력
+if (total_received > 0) {
+    buffer[total_received] = '\0';
+    printf("응답:\n%.*s\n", total_received, buffer);
+}
 
     freeaddrinfo(res);  // 메모리 해제
     close(sockfd);
